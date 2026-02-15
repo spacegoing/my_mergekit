@@ -18,8 +18,15 @@ from mergekit.merge import MergeOptions, run_merge
 
 # ---- edit these ----
 BASE_MODEL = "/root/myCodeLab/host/downloads/models/40Bv6/dpo-0210-0208-v2-dpoaddid-965/965"
+RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c415_facpo_nemogym_math_d1.0-tp1.5-tn2.0-ent0.001-bdm1-ppoch2-575c58dc_20260215_033228/global_step_30/actor/huggingface"
+
 RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c351_facpo_nemogym_math_d0.5-tp1.5-tn2.0-ent0-bdm1-ppoch2-1cb2094f_20260213_184907/global_step_80/actor/huggingface"
-OUT_PATH = "./merged_output"
+OUT_PATH = "./c351_kgs8v3"
+COMBO = "ta_0.3"  # <-- switch combo here
+# Component-selective: skip moe_gate weights (keep routing from base).
+# analyze_delta.py showed moe_gate has 10-100x larger relative change than other components.
+SKIP_GATE = True  # <-- set False to merge everything including gates
+
 DTYPE = "float32"       # compute in float32 for precision (bf16 loses bits in τ = θ_RL - θ_base)
 OUT_DTYPE = "bfloat16"  # save output in bfloat16 to keep model size normal
 CUDA = True
@@ -29,12 +36,6 @@ MTP_LAYER = 40    # MTP layer index (always from base)
 
 # Layer-selective: which layers to merge. Layers outside stay pure base.
 MERGE_RANGE = [0, 40]   # <-- [start, end), e.g. [20,40] to skip early layers
-
-# Component-selective: skip moe_gate weights (keep routing from base).
-# analyze_delta.py showed moe_gate has 10-100x larger relative change than other components.
-SKIP_GATE = True  # <-- set False to merge everything including gates
-
-COMBO = "ta_0.3"  # <-- switch combo here
 
 COMBOS = {
     # task arithmetic (density=1.0, no dropout) — best for single expert on large models
