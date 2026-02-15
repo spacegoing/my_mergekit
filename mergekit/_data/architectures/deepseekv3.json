@@ -1,0 +1,62 @@
+{
+    "model_type": "deepseek_v3",
+    "architectures": [
+        "DeepseekV3ForCausalLM"
+    ],
+    "pre_weights": [
+        {
+            "name": "model.embed_tokens.weight",
+            "is_embed": true
+        }
+    ],
+    "num_layers_config_key": "num_hidden_layers",
+    "layer_templates": {
+        "weights": [
+            {
+                "name": "model.layers.${layer_index}.input_layernorm.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.mlp.down_proj.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.mlp.gate_proj.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.mlp.up_proj.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.post_attention_layernorm.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.self_attn.kv_a_layernorm.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.self_attn.kv_a_proj_with_mqa.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.self_attn.kv_b_proj.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.self_attn.o_proj.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.self_attn.q_a_layernorm.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.self_attn.q_a_proj.weight"
+            },
+            {
+                "name": "model.layers.${layer_index}.self_attn.q_b_proj.weight"
+            }
+        ]
+    },
+    "post_weights": [
+        {
+            "name": "model.norm.weight"
+        },
+        {
+            "name": "lm_head.weight",
+            "is_embed": true
+        }
+    ]
+}

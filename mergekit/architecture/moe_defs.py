@@ -143,6 +143,97 @@ class AfmoeModuleArchitecture(ModuleArchitecture, BaseModel):
         return res
 
 
+DSV3_INFO = NAME_TO_ARCH["DeepseekV3ForCausalLM"][0]
+DSV3_MODULE_ARCH = DSV3_INFO.modules["default"].architecture
+
+
+class DeepseekV3ModuleArchitecture(ModuleArchitecture, BaseModel):
+    ARCHITECTURE_NAME: ClassVar[str] = "DeepseekV3ForCausalLM"
+    num_experts: int
+
+    def name(self) -> str:
+        return "deepseek_v3"
+
+    @classmethod
+    def from_config(cls, config: PretrainedConfig):
+        return DeepseekV3ModuleArchitecture(
+            num_experts=config.n_routed_experts,
+        )
+
+    def pre_weights(self, config: PretrainedConfig) -> List[WeightInfo]:
+        return DSV3_MODULE_ARCH.pre_weights(config)
+
+    def post_weights(self, config: PretrainedConfig) -> List[WeightInfo]:
+        return DSV3_MODULE_ARCH.post_weights(config)
+
+    def num_layers_config_key(self) -> str:
+        return DSV3_MODULE_ARCH.num_layers_config_key()
+
+    def num_layers(self, config: PretrainedConfig) -> int:
+        num_hidden = config.num_hidden_layers
+        num_mtp = getattr(config, "num_nextn_predict_layers", 0)
+        return num_hidden + num_mtp
+
+    def layer_weights(
+        self, index: int, config: PretrainedConfig
+    ) -> Optional[List[WeightInfo]]:
+        num_hidden = config.num_hidden_layers
+        first_k_dense = getattr(config, "first_k_dense_replace", 1)
+        prefix = f"model.layers.{index}"
+
+        if index >= num_hidden:
+            # MTP layer: dense attention + dense MLP + MTP-specific weights
+            res = list(DSV3_MODULE_ARCH.layer_weights(index, config))
+            for mtp_name in (
+                "eh_proj.weight",
+                "enorm.weight",
+                "hnorm.weight",
+                "shared_head.norm.weight",
+            ):
+                res.append(WeightInfo(name=prefix + "." + mtp_name))
+            return res
+        elif index < first_k_dense:
+            # Dense layer: use base JSON definition as-is
+            return DSV3_MODULE_ARCH.layer_weights(index, config)
+        else:
+            # Check if this layer is MoE based on moe_layer_freq
+            moe_layer_freq = getattr(config, "moe_layer_freq", 1)
+            is_moe = (index - first_k_dense) % moe_layer_freq == 0
+
+            if not is_moe:
+                # Interleaved dense layer within MoE range
+                return DSV3_MODULE_ARCH.layer_weights(index, config)
+
+            # MoE layer: routed experts + shared experts + gate + non-MLP base
+            tensor_names = []
+            for expert_idx in range(self.num_experts):
+                tensor_names.append(
+                    prefix + f".mlp.experts.{expert_idx}.gate_proj.weight"
+                )
+                tensor_names.append(
+                    prefix + f".mlp.experts.{expert_idx}.up_proj.weight"
+                )
+                tensor_names.append(
+                    prefix + f".mlp.experts.{expert_idx}.down_proj.weight"
+                )
+            tensor_names.append(prefix + ".mlp.gate.weight")
+            tensor_names.append(prefix + ".mlp.gate.e_score_correction_bias")
+            res = []
+            for name in tensor_names:
+                res.append(WeightInfo(name=name))
+            n_shared = getattr(config, "n_shared_experts", 0)
+            if n_shared > 0:
+                for param in ("gate_proj", "up_proj", "down_proj"):
+                    res.append(WeightInfo(
+                        name=prefix + f".mlp.shared_experts.{param}.weight",
+                    ))
+            for weight_info in DSV3_MODULE_ARCH.layer_weights(index, config):
+                if ".mlp." in weight_info.name:
+                    continue
+                res.append(weight_info)
+            return res
+
+
 GLM4_INFO = NAME_TO_ARCH["Glm4MoeForCausalLM"][0]
 GLM4_MODULE_ARCH = GLM4_INFO.modules["default"].architecture
 

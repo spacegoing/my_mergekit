@@ -19,6 +19,7 @@ from mergekit.architecture.base import (
 from mergekit.architecture.json_definitions import NAME_TO_ARCH
 from mergekit.architecture.moe_defs import (
     AfmoeModuleArchitecture,
+    DeepseekV3ModuleArchitecture,
     Glm4MoeModuleArchitecture,
     MixtralModuleArchitecture,
     Qwen3MoeModuleArchitecture,
@@ -58,6 +59,13 @@ def arch_info_for_config(config: PretrainedConfig) -> Optional[ModelArchitecture
             modules={"default": ModuleDefinition(architecture=module)},
             architectures=[arch_name],
             model_type="afmoe",
+        )
+    elif arch_name == DeepseekV3ModuleArchitecture.ARCHITECTURE_NAME:
+        module = DeepseekV3ModuleArchitecture.from_config(config)
+        return ModelArchitecture(
+            modules={"default": ModuleDefinition(architecture=module)},
+            architectures=[arch_name],
+            model_type="deepseek_v3",
         )
     elif arch_name == Glm4MoeModuleArchitecture.ARCHITECTURE_NAME:
         module = Glm4MoeModuleArchitecture.from_config(config)
