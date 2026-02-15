@@ -2,11 +2,14 @@
 DARE-linear single-model merge. Edit the vars below and run:
   python single_merge/dare_single.py
 
-Uses mergekit slices to exclude MTP layer from merge.
-Supports layer-selective merging: only merge MERGE_RANGE layers, keep the rest from base.
+Supports:
+  - Layer-selective merging (MERGE_RANGE)
+  - Component-selective merging (SKIP_GATE)
+  - MTP layer exclusion
 """
 
 from mergekit.config import (
+    ConditionalParameter,
     InputSliceDefinition,
     MergeConfiguration,
     OutputSliceDefinition,
@@ -24,26 +27,43 @@ CUDA = True
 NUM_HIDDEN = 40   # base transformer layers: 0..39
 MTP_LAYER = 40    # MTP layer index (always from base)
 
-# Which layers to merge with RL. Layers outside this range stay pure base.
-MERGE_RANGE = [20, 40]  # <-- [start, end), try [20,40], [10,40], [30,40]
+# Layer-selective: which layers to merge. Layers outside stay pure base.
+MERGE_RANGE = [0, 40]   # <-- [start, end), e.g. [20,40] to skip early layers
 
-COMBO = "ta_0.1"  # <-- switch combo here
+# Component-selective: skip moe_gate weights (keep routing from base).
+# analyze_delta.py showed moe_gate has 10-100x larger relative change than other components.
+SKIP_GATE = True  # <-- set False to merge everything including gates
+
+COMBO = "ta_0.3"  # <-- switch combo here
 
 COMBOS = {
     # task arithmetic (density=1.0, no dropout) — best for single expert on large models
     "ta_0.1":         {"weight": 0.1, "density": 1.0},
     "ta_0.3":         {"weight": 0.3, "density": 1.0},
     "ta_0.5":         {"weight": 0.5, "density": 1.0},
+    "ta_0.7":         {"weight": 0.7, "density": 1.0},
+    "ta_1.0":         {"weight": 1.0, "density": 1.0},
     # dare (with dropout) — for reference, not recommended for 40B MoE
-    "recommended":    {"weight": 0.7, "density": 0.5},
-    "conservative":   {"weight": 0.5, "density": 0.3},
-    "aggressive":     {"weight": 1.0, "density": 0.7},
+    "dare_0.7_d0.5":  {"weight": 0.7, "density": 0.5},
 }
 # ---------------------
 
 params = COMBOS[COMBO]
 w, d = params["weight"], params["density"]
 merge_start, merge_end = MERGE_RANGE
+
+# Build per-model parameters with optional gate skipping
+if SKIP_GATE:
+    # weight=0 for gate tensors → keeps base routing; weight=w for everything else
+    rl_params = {
+        "weight": [
+            ConditionalParameter(value=0.0, filter=".mlp.gate."),
+            ConditionalParameter(value=w),
+        ],
+        "density": d,
+    }
+else:
+    rl_params = {"weight": w, "density": d}
 
 # Build slices: base-only → merged → base-only → MTP
 slices = []
@@ -61,7 +81,7 @@ slices.append(
     OutputSliceDefinition(sources=[
         InputSliceDefinition(model=BASE_MODEL, layer_range=[merge_start, merge_end]),
         InputSliceDefinition(model=RL_MODEL, layer_range=[merge_start, merge_end],
-                             parameters={"weight": w, "density": d}),
+                             parameters=rl_params),
     ])
 )
 
@@ -88,11 +108,16 @@ config = MergeConfiguration(
     out_dtype=OUT_DTYPE,
 )
 
+gate_str = "SKIP moe_gate (weight=0)" if SKIP_GATE else "merge all components"
+layer_str = f"layers {merge_start}-{merge_end - 1}"
+if merge_start > 0:
+    layer_str += f"  (skip 0-{merge_start - 1} from base)"
+
 print(f"[{COMBO}] weight={w}, density={d}")
 print(f"  base:    {BASE_MODEL}")
 print(f"  rl:      {RL_MODEL}")
-print(f"  merge:   layers {merge_start}-{merge_end - 1}  (skip 0-{merge_start - 1} from base)" if merge_start > 0
-      else f"  merge:   layers {merge_start}-{merge_end - 1}")
+print(f"  merge:   {layer_str}")
+print(f"  gate:    {gate_str}")
 print(f"  base:    layers outside [{merge_start}, {merge_end}) + MTP layer {MTP_LAYER}")
 print(f"  out:     {OUT_PATH}")
 
