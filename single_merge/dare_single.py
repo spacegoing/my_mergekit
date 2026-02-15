@@ -1,6 +1,6 @@
 """
 DARE-linear single-model merge. Edit the vars below and run:
-  python longcat_merge/dare_single.py
+  python single_merge/dare_single.py
 
 Uses mergekit slices to exclude MTP layer from merge.
 RL checkpoint does NOT need MTP inserted — slices only reference RL for layers 0..NUM_HIDDEN-1.
@@ -15,7 +15,7 @@ from mergekit.merge import MergeOptions, run_merge
 
 # ---- edit these ----
 BASE_MODEL = "/root/myCodeLab/host/downloads/models/40Bv6/dpo-0210-0208-v2-dpoaddid-965/965"
-RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c351_facpo_nemogym_math_d0.5-tp1.5-tn2.0-ent0-bdm1-ppoch2-1cb2094f_20260213_184907/actor/huggingface"
+RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c351_facpo_nemogym_math_d0.5-tp1.5-tn2.0-ent0-bdm1-ppoch2-1cb2094f_20260213_184907/global_step_80/actor/huggingface"
 OUT_PATH = "./merged_output"
 DTYPE = "bfloat16"
 CUDA = False
