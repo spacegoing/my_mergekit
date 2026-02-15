@@ -18,17 +18,22 @@ BASE_MODEL = "/root/myCodeLab/host/downloads/models/40Bv6/dpo-0210-0208-v2-dpoad
 RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c351_facpo_nemogym_math_d0.5-tp1.5-tn2.0-ent0-bdm1-ppoch2-1cb2094f_20260213_184907/global_step_80/actor/huggingface"
 OUT_PATH = "./merged_output"
 DTYPE = "bfloat16"
-CUDA = False
+CUDA = True
 
 NUM_HIDDEN = 40   # base transformer layers: 0..39
 EXCLUDE_LAYERS = [40]  # MTP layer index
 
-COMBO = "recommended"  # <-- switch combo here
+COMBO = "ta_0.1"  # <-- switch combo here
 
 COMBOS = {
-    "recommended":  {"weight": 0.7, "density": 0.5},
-    "conservative": {"weight": 0.5, "density": 0.3},
-    "aggressive":   {"weight": 1.0, "density": 0.7},
+    # task arithmetic (density=1.0, no dropout) — best for single expert on large models
+    "ta_0.1":         {"weight": 0.1, "density": 1.0},
+    "ta_0.3":         {"weight": 0.3, "density": 1.0},
+    "ta_0.5":         {"weight": 0.5, "density": 1.0},
+    # dare (with dropout) — for reference, not recommended for 40B MoE
+    "recommended":    {"weight": 0.7, "density": 0.5},
+    "conservative":   {"weight": 0.5, "density": 0.3},
+    "aggressive":     {"weight": 1.0, "density": 0.7},
 }
 # ---------------------
 
