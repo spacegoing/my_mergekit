@@ -167,7 +167,11 @@ class DeepseekV3ModuleArchitecture(ModuleArchitecture, BaseModel):
         return DSV3_MODULE_ARCH.post_weights(config)
 
     def num_layers_config_key(self) -> str:
-        return DSV3_MODULE_ARCH.num_layers_config_key()
+        # Return None: total layers = num_hidden_layers + num_nextn_predict_layers,
+        # so no single config key represents the total. Returning None prevents
+        # _model_out_config from overwriting num_hidden_layers with the total
+        # slice count (which would break the MTP vs MoE layer boundary).
+        return None
 
     def num_layers(self, config: PretrainedConfig) -> int:
         num_hidden = config.num_hidden_layers
