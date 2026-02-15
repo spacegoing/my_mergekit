@@ -19,6 +19,7 @@ from safetensors import safe_open
 # ---- edit these (same as dare_single.py) ----
 BASE_DIR = "/root/myCodeLab/host/downloads/models/40Bv6/dpo-0210-0208-v2-dpoaddid-965/965"
 RL_DIR = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c351_facpo_nemogym_math_d0.5-tp1.5-tn2.0-ent0-bdm1-ppoch2-1cb2094f_20260213_184907/global_step_80/actor/huggingface"
+RL_DIR = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c411_facpo_nemogym_math_d1.0-tp1.5-tn2.0-ent0-bdm1-ppoch2-575c58dc_20260214_211417/global_step_60/actor/huggingface"
 # ----------------------------------------------
 
 

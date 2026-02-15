@@ -21,7 +21,8 @@ BASE_MODEL = "/root/myCodeLab/host/downloads/models/40Bv6/dpo-0210-0208-v2-dpoad
 RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c415_facpo_nemogym_math_d1.0-tp1.5-tn2.0-ent0.001-bdm1-ppoch2-575c58dc_20260215_033228/global_step_30/actor/huggingface"
 
 RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c351_facpo_nemogym_math_d0.5-tp1.5-tn2.0-ent0-bdm1-ppoch2-1cb2094f_20260213_184907/global_step_80/actor/huggingface"
-OUT_PATH = "./c351_kgs8v3"
+RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c411_facpo_nemogym_math_d1.0-tp1.5-tn2.0-ent0-bdm1-ppoch2-575c58dc_20260214_211417/global_step_60/actor/huggingface"
+OUT_PATH = "./c411_kgs6v3"
 COMBO = "ta_0.3"  # <-- switch combo here
 # Component-selective: skip moe_gate weights (keep routing from base).
 # analyze_delta.py showed moe_gate has 10-100x larger relative change than other components.
@@ -39,7 +40,10 @@ MERGE_RANGE = [0, 40]   # <-- [start, end), e.g. [20,40] to skip early layers
 
 COMBOS = {
     # task arithmetic (density=1.0, no dropout) — best for single expert on large models
+    "ta_0.05":         {"weight": 0.05, "density": 1.0},
     "ta_0.1":         {"weight": 0.1, "density": 1.0},
+    "ta_0.1_8":         {"weight": 0.1, "density": 0.8},
+    "ta_0.2":         {"weight": 0.2, "density": 1.0},
     "ta_0.3":         {"weight": 0.3, "density": 1.0},
     "ta_0.5":         {"weight": 0.5, "density": 1.0},
     "ta_0.7":         {"weight": 0.7, "density": 1.0},
