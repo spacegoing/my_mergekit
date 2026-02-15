@@ -149,6 +149,7 @@ definitions. Pattern copied from `mergekit/_data/architectures/glm4moe.json`.
 | Addition | Reason | Evidence |
 |----------|--------|----------|
 | `num_layers()` override: returns `num_hidden + num_mtp` | DeepSeek-V3 has MTP layer at index `num_hidden_layers` | ckpt_inspect line 69: "Layer indices present: 0..40" |
+| `num_layers_config_key()` returns `None` | No single config key = total layers (total = `num_hidden_layers + num_nextn_predict_layers`). Prevents `_model_out_config()` from overwriting `num_hidden_layers` with slice count, which would break the MTP/MoE layer boundary. | See "Output Config Bug" section below |
 | MTP branch in `layer_weights()` | Layer 40 has unique weights (eh_proj, enorm, hnorm, shared_head.norm) | ckpt_inspect lines 76-91 |
 | `moe_layer_freq` check | Not all layers after `first_k_dense_replace` are guaranteed MoE | dsv3_40B_info.text line 25: `"moe_layer_freq": 1` |
 | `n_shared_experts` conditional | Shared experts may not exist in all variants | dsv3_40B_info.text line 28: `"n_shared_experts": 1` |
@@ -180,6 +181,43 @@ exact match.
 - `final_norm: 1` + `lm_head: 1` = post_weights (2) -- match
 - `base_layer: 30510` = 1 x 12 + 39 x 782 = 30510 -- match
 - `mtp_layer: 16` = 1 x 16 = 16 -- match
+
+---
+
+## Output Config Bug (Fixed)
+
+### Problem
+
+`merge.py:_model_out_config()` computes total output layers from slices and
+sets `num_hidden_layers` to that total:
+
+```
+Slice 0: layers [0, 40) → 40 layers
+Slice 1: layers [40, 41) → 1 layer
+Total: 41 → set_config_value(cfg_out, "num_hidden_layers", 41)
+```
+
+With `cfg_out.num_hidden_layers = 41`, `layer_weights(40, cfg_out)` checks
+`40 >= 41` → False → treats layer 40 as MoE (782 weights). But the base
+model's config has `num_hidden_layers = 40`, so `layer_weights(40, base_config)`
+correctly identifies it as MTP (16 weights).
+
+**Result**: `plan_layer()` has `weights_out` = 782, `weights_in[0]` = 16 →
+`IndexError: list index out of range` at `plan.py:260`.
+
+### Fix
+
+`num_layers_config_key()` returns `None`. This causes `_model_out_config()` to
+skip the `set_config_value` call (handled at merge.py line 323-329: `if not
+cfg_key: continue`). The output config keeps `num_hidden_layers = 40` from the
+base model, preserving the correct MTP/MoE boundary.
+
+This is safe because:
+1. `num_layers()` is overridden and does NOT call `num_layers_config_key()`
+2. `normalize_config()` uses `num_layers()` directly (not the config key)
+3. For full merges, the base model config already has correct values
+4. `JsonModuleArchDef.num_layers_config_key` is `Optional[str]` — `None` is
+   an established pattern in mergekit's architecture system
 
 ---
 
