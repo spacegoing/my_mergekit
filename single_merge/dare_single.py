@@ -1,64 +1,79 @@
 """
-Merge a single RL checkpoint back into its base using dare_linear.
+DARE-linear single-model merge. Edit the vars below and run:
+  python longcat_merge/dare_single.py
 
-Formula per tensor:
-  result = base + weight * L1Rescale(delta * Bernoulli(density))
-  where delta = rl_checkpoint - base
-
-Usage:
-  python longcat_merge/dare_single.py \
-    --base /path/to/sft_dpo_base \
-    --rl /path/to/math_rl_checkpoint \
-    --out /path/to/merged_output \
-    --weight 0.7 \
-    --density 0.5 \
-    --dtype bfloat16
+Uses mergekit slices to exclude MTP layer from merge.
+RL checkpoint does NOT need MTP inserted — slices only reference RL for layers 0..NUM_HIDDEN-1.
 """
 
-import argparse
-
-from mergekit.config import InputModelDefinition, MergeConfiguration
+from mergekit.config import (
+    InputSliceDefinition,
+    MergeConfiguration,
+    OutputSliceDefinition,
+)
 from mergekit.merge import MergeOptions, run_merge
 
+# ---- edit these ----
+BASE_MODEL = "/root/myCodeLab/host/downloads/models/40Bv6/dpo-0210-0208-v2-dpoaddid-965/965"
+RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c351_facpo_nemogym_math_d0.5-tp1.5-tn2.0-ent0-bdm1-ppoch2-1cb2094f_20260213_184907/actor/huggingface"
+OUT_PATH = "./merged_output"
+DTYPE = "bfloat16"
+CUDA = False
 
-def main():
-    p = argparse.ArgumentParser(description="DARE-linear single-model merge")
-    p.add_argument("--base", required=True, help="Base (SFT/DPO) model path")
-    p.add_argument("--rl", required=True, help="RL checkpoint path")
-    p.add_argument("--out", required=True, help="Output path")
-    p.add_argument("--weight", type=float, default=0.7)
-    p.add_argument("--density", type=float, default=0.5)
-    p.add_argument("--dtype", default="bfloat16")
-    p.add_argument("--cuda", action="store_true")
-    p.add_argument("--lazy-unpickle", action="store_true")
-    args = p.parse_args()
+NUM_HIDDEN = 40   # base transformer layers: 0..39
+EXCLUDE_LAYERS = [40]  # MTP layer index
 
-    # dare_linear defaults: rescale=True, normalize=False, consensus=None
-    config = MergeConfiguration(
-        merge_method="dare_linear",
-        base_model=args.base,
-        models=[
-            InputModelDefinition(
-                model=args.rl,
-                parameters={"weight": args.weight, "density": args.density},
-            ),
+COMBO = "recommended"  # <-- switch combo here
+
+COMBOS = {
+    "recommended":  {"weight": 0.7, "density": 0.5},
+    "conservative": {"weight": 0.5, "density": 0.3},
+    "aggressive":   {"weight": 1.0, "density": 0.7},
+}
+# ---------------------
+
+params = COMBOS[COMBO]
+w, d = params["weight"], params["density"]
+
+# Build layer ranges: merge everything except excluded layers
+# For layers 0..39: both base + RL (dare_linear merge)
+# For layer 40 (MTP): base only (passes through unchanged)
+slices = []
+
+# merged range: [0, NUM_HIDDEN)
+slices.append(
+    OutputSliceDefinition(
+        sources=[
+            InputSliceDefinition(model=BASE_MODEL, layer_range=[0, NUM_HIDDEN]),
+            InputSliceDefinition(model=RL_MODEL, layer_range=[0, NUM_HIDDEN],
+                                 parameters={"weight": w, "density": d}),
         ],
-        dtype=args.dtype,
+    )
+)
+
+# excluded layers: base only, dare_linear sees no task vectors → returns base
+for layer_idx in EXCLUDE_LAYERS:
+    slices.append(
+        OutputSliceDefinition(
+            sources=[
+                InputSliceDefinition(model=BASE_MODEL, layer_range=[layer_idx, layer_idx + 1]),
+            ],
+        )
     )
 
-    options = MergeOptions(
-        cuda=args.cuda,
-        lazy_unpickle=args.lazy_unpickle,
-    )
+config = MergeConfiguration(
+    merge_method="dare_linear",
+    base_model=BASE_MODEL,
+    slices=slices,
+    dtype=DTYPE,
+)
 
-    print(f"dare_linear merge: weight={args.weight}, density={args.density}")
-    print(f"  base:   {args.base}")
-    print(f"  rl:     {args.rl}")
-    print(f"  output: {args.out}")
+print(f"[{COMBO}] weight={w}, density={d}")
+print(f"  base:    {BASE_MODEL}")
+print(f"  rl:      {RL_MODEL}")
+print(f"  merge:   layers 0-{NUM_HIDDEN - 1}")
+print(f"  exclude: layers {EXCLUDE_LAYERS} (copy from base)")
+print(f"  out:     {OUT_PATH}")
 
-    run_merge(config, args.out, options=options)
-    print("Done.")
-
-
-if __name__ == "__main__":
-    main()
+run_merge(config, OUT_PATH, options=MergeOptions(cuda=CUDA))
+print("Done.")
