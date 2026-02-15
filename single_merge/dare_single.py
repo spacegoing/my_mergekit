@@ -17,7 +17,8 @@ from mergekit.merge import MergeOptions, run_merge
 BASE_MODEL = "/root/myCodeLab/host/downloads/models/40Bv6/dpo-0210-0208-v2-dpoaddid-965/965"
 RL_MODEL = "/root/myCodeLab/host/verl/ckpts/single_domain/sd_c351_facpo_nemogym_math_d0.5-tp1.5-tn2.0-ent0-bdm1-ppoch2-1cb2094f_20260213_184907/global_step_80/actor/huggingface"
 OUT_PATH = "./merged_output"
-DTYPE = "bfloat16"
+DTYPE = "float32"       # compute in float32 for precision (bf16 loses bits in τ = θ_RL - θ_base)
+OUT_DTYPE = "bfloat16"  # save output in bfloat16 to keep model size normal
 CUDA = True
 
 NUM_HIDDEN = 40   # base transformer layers: 0..39
@@ -71,6 +72,7 @@ config = MergeConfiguration(
     base_model=BASE_MODEL,
     slices=slices,
     dtype=DTYPE,
+    out_dtype=OUT_DTYPE,
 )
 
 print(f"[{COMBO}] weight={w}, density={d}")
