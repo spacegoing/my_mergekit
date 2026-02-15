@@ -77,6 +77,8 @@ def main():
             print(f"  [{i}/{len(common_keys)}] {key[:60]}...")
 
         layer_idx, suffix = parse_layer(key)
+        if layer_idx is not None and layer_idx >= 40:  # skip MTP layer
+            continue
         component = classify_component(key)
         group = (layer_idx, component)  # layer_idx=None for non-layer weights
 
