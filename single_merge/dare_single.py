@@ -3,7 +3,7 @@ DARE-linear single-model merge. Edit the vars below and run:
   python single_merge/dare_single.py
 
 Uses mergekit slices to exclude MTP layer from merge.
-RL checkpoint does NOT need MTP inserted — slices only reference RL for layers 0..NUM_HIDDEN-1.
+Supports layer-selective merging: only merge MERGE_RANGE layers, keep the rest from base.
 """
 
 from mergekit.config import (
@@ -22,7 +22,10 @@ OUT_DTYPE = "bfloat16"  # save output in bfloat16 to keep model size normal
 CUDA = True
 
 NUM_HIDDEN = 40   # base transformer layers: 0..39
-EXCLUDE_LAYERS = [40]  # MTP layer index
+MTP_LAYER = 40    # MTP layer index (always from base)
+
+# Which layers to merge with RL. Layers outside this range stay pure base.
+MERGE_RANGE = [20, 40]  # <-- [start, end), try [20,40], [10,40], [30,40]
 
 COMBO = "ta_0.1"  # <-- switch combo here
 
@@ -40,32 +43,42 @@ COMBOS = {
 
 params = COMBOS[COMBO]
 w, d = params["weight"], params["density"]
+merge_start, merge_end = MERGE_RANGE
 
-# Build layer ranges: merge everything except excluded layers
-# For layers 0..39: both base + RL (dare_linear merge)
-# For layer 40 (MTP): base only (passes through unchanged)
+# Build slices: base-only → merged → base-only → MTP
 slices = []
 
-# merged range: [0, NUM_HIDDEN)
-slices.append(
-    OutputSliceDefinition(
-        sources=[
-            InputSliceDefinition(model=BASE_MODEL, layer_range=[0, NUM_HIDDEN]),
-            InputSliceDefinition(model=RL_MODEL, layer_range=[0, NUM_HIDDEN],
-                                 parameters={"weight": w, "density": d}),
-        ],
+# 1. Layers before merge range: base only
+if merge_start > 0:
+    slices.append(
+        OutputSliceDefinition(sources=[
+            InputSliceDefinition(model=BASE_MODEL, layer_range=[0, merge_start]),
+        ])
     )
+
+# 2. Merged range: base + RL
+slices.append(
+    OutputSliceDefinition(sources=[
+        InputSliceDefinition(model=BASE_MODEL, layer_range=[merge_start, merge_end]),
+        InputSliceDefinition(model=RL_MODEL, layer_range=[merge_start, merge_end],
+                             parameters={"weight": w, "density": d}),
+    ])
 )
 
-# excluded layers: base only, dare_linear sees no task vectors → returns base
-for layer_idx in EXCLUDE_LAYERS:
+# 3. Layers after merge range but before MTP: base only
+if merge_end < NUM_HIDDEN:
     slices.append(
-        OutputSliceDefinition(
-            sources=[
-                InputSliceDefinition(model=BASE_MODEL, layer_range=[layer_idx, layer_idx + 1]),
-            ],
-        )
+        OutputSliceDefinition(sources=[
+            InputSliceDefinition(model=BASE_MODEL, layer_range=[merge_end, NUM_HIDDEN]),
+        ])
     )
+
+# 4. MTP layer: base only
+slices.append(
+    OutputSliceDefinition(sources=[
+        InputSliceDefinition(model=BASE_MODEL, layer_range=[MTP_LAYER, MTP_LAYER + 1]),
+    ])
+)
 
 config = MergeConfiguration(
     merge_method="dare_linear",
@@ -78,8 +91,9 @@ config = MergeConfiguration(
 print(f"[{COMBO}] weight={w}, density={d}")
 print(f"  base:    {BASE_MODEL}")
 print(f"  rl:      {RL_MODEL}")
-print(f"  merge:   layers 0-{NUM_HIDDEN - 1}")
-print(f"  exclude: layers {EXCLUDE_LAYERS} (copy from base)")
+print(f"  merge:   layers {merge_start}-{merge_end - 1}  (skip 0-{merge_start - 1} from base)" if merge_start > 0
+      else f"  merge:   layers {merge_start}-{merge_end - 1}")
+print(f"  base:    layers outside [{merge_start}, {merge_end}) + MTP layer {MTP_LAYER}")
 print(f"  out:     {OUT_PATH}")
 
 run_merge(config, OUT_PATH, options=MergeOptions(cuda=CUDA))
